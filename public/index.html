@@ -1,36 +1,165 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SyncMesh-Sync | Operational Studio</title>
+  <title>SyncMesh-Sync v2.0.0 | Distributed CRDT & Mesh Topology Studio</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
-  <header class="header">
-    <div class="brand">
-      <span class="logo">⚡</span>
-      <div>
-        <h1>SyncMesh-Sync</h1>
-        <span class="sub">Peer-to-Peer CRDT Document Synchronization Engine</span>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-icon">🌐</span>
+        <div class="brand-info">
+          <h1>SyncMesh-Sync <span class="badge version">v2.0.0</span></h1>
+          <p class="subtitle">Distributed CvRDT (LWW-Element-Set, PN-Counter) &bull; Vector Clocks &bull; Anti-Entropy Gossip</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="sse-status" id="sseStatus">
+          <span class="pulse-dot"></span>
+          <span id="sseLabel">Connecting SSE...</span>
+        </div>
+        <button class="btn btn-secondary" id="btnHealCluster">🩹 Heal All Partitions</button>
+        <button class="btn btn-primary" id="btnGossipSweep">⚡ Trigger Gossip Sweep</button>
+      </div>
+    </header>
+
+    <!-- Top KPI Grid -->
+    <section class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">ACTIVE NODES</span>
+          <span class="kpi-icon">🖥️</span>
+        </div>
+        <div class="kpi-value" id="kpiTotalNodes">--</div>
+        <div class="kpi-sub">Replicated mesh peers</div>
+      </div>
+      <div class="kpi-card" id="kpiConvergenceCard">
+        <div class="kpi-header">
+          <span class="kpi-title">CONSENSUS STATUS</span>
+          <span class="kpi-icon">⚖️</span>
+        </div>
+        <div class="kpi-value" id="kpiConvergence">CONVERGED</div>
+        <div class="kpi-sub" id="kpiConvergenceSub">Strong eventual consistency</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">ACTIVE PARTITIONS</span>
+          <span class="kpi-icon">✂️</span>
+        </div>
+        <div class="kpi-value" id="kpiPartitions">0</div>
+        <div class="kpi-sub">Network split-brain links</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">PN-COUNTER SUM</span>
+          <span class="kpi-icon">🔢</span>
+        </div>
+        <div class="kpi-value" id="kpiCounterSum">--</div>
+        <div class="kpi-sub">P/N join-semilattice net value</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <span class="kpi-title">LWW-SET ELEMENTS</span>
+          <span class="kpi-icon">📦</span>
+        </div>
+        <div class="kpi-value" id="kpiLwwElements">--</div>
+        <div class="kpi-sub">Active unique keys</div>
+      </div>
+    </section>
+
+    <!-- Main Workspace -->
+    <div class="workspace-layout">
+      <!-- Left: Mesh Peers Fleet -->
+      <section class="peers-panel">
+        <div class="panel-header">
+          <h2>Distributed Mesh Nodes</h2>
+          <button class="btn btn-secondary btn-sm" id="btnOpenAddNodeModal">+ Join New Peer</button>
+        </div>
+
+        <div class="nodes-grid" id="nodesGrid">
+          <div class="loading-state">Loading mesh topology...</div>
+        </div>
+      </section>
+
+      <!-- Right: Partition Control & SSE Activity Feed -->
+      <aside class="activity-panel">
+        <div class="sub-panel">
+          <div class="panel-header">
+            <h3>Simulate Network Partition</h3>
+          </div>
+          <form id="partitionForm" class="partition-form">
+            <div class="partition-selects">
+              <select id="partNodeA" class="form-select"></select>
+              <span class="partition-icon">⚡/⚡</span>
+              <select id="partNodeB" class="form-select"></select>
+            </div>
+            <div class="partition-actions">
+              <button type="button" class="btn btn-secondary btn-sm" id="btnBlockLink" style="color: var(--accent-rose);">Sever Link</button>
+              <button type="button" class="btn btn-secondary btn-sm" id="btnUnblockLink" style="color: var(--accent-emerald);">Restore Link</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="sub-panel flex-1">
+          <div class="panel-header">
+            <h3>Anti-Entropy Event Stream</h3>
+            <span class="live-badge">LIVE SSE</span>
+          </div>
+          <div class="feed-container" id="feedContainer">
+            <div class="feed-empty">Listening for distributed gossip events...</div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Add Element Modal -->
+    <div class="modal-overlay" id="addElementModal" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>➕ Add Element to Node LWW-Set</h3>
+          <button class="modal-close" id="btnCloseAddElemModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="targetNodeId">
+          <label>Element Key / String:</label>
+          <input type="text" id="newElementInput" class="form-input" placeholder="e.g. cluster.jwt.signing_key">
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="btnConfirmAddElement">Commit Element</button>
+        </div>
       </div>
     </div>
-    <div class="status-badge">🟢 Operational Active</div>
-  </header>
-  <main class="main">
-    <div class="card">
-      <h2>Engine Overview</h2>
-      <p>Real-time state synchronization engine resolving concurrent text edits with Conflict-free Replicated Data Types.</p>
-      <div class="metrics-row" id="metricsRow">
-        <div class="metric"><span class="lbl">STATUS</span><span class="val">HEALTHY</span></div>
-        <div class="metric"><span class="lbl">LATENCY</span><span class="val">1.2 ms</span></div>
-        <div class="metric"><span class="lbl">THROUGHPUT</span><span class="val">1,250 req/s</span></div>
+
+    <!-- Join Peer Modal -->
+    <div class="modal-overlay" id="addNodeModal" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>🖥️ Join New Peer to Cluster</h3>
+          <button class="modal-close" id="btnCloseAddNodeModal">&times;</button>
+        </div>
+        <div class="modal-body">
+          <label>Node Identifier:</label>
+          <input type="text" id="newNodeId" class="form-input" placeholder="e.g. node_delta">
+          <label>Display Label:</label>
+          <input type="text" id="newNodeName" class="form-input" placeholder="e.g. Edge Ingress (Delta)">
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-primary" id="btnConfirmAddNode">Join Node</button>
+        </div>
       </div>
     </div>
-  </main>
-  <footer class="footer">
-    <p>SyncMesh-Sync &bull; Autonomously engineered by 7-Agent SDLC Factory for <a href="https://github.com/alinurettin/SyncMesh-Sync" target="_blank">Ali Nurettin Demir</a></p>
-  </footer>
+
+    <footer class="app-footer">
+      <p>SyncMesh-Sync v2.0.0 &bull; Autonomously engineered by 7-Agent SDLC Factory for <a href="https://github.com/alinurettin/SyncMesh-Sync" target="_blank">Ali Nurettin Demir</a></p>
+    </footer>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
