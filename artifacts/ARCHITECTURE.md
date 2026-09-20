@@ -1,4 +1,4 @@
-﻿# ğŸ“ System Architecture Document: SyncMesh-Sync
+﻿# 📐 System Architecture Document: SyncMesh-Sync
 - **Project:** SyncMesh-Sync
 - **Author:** Expert Software Architect
 - **Status:** APPROVED & COMPLETE
